@@ -1,4 +1,4 @@
-name = "ory-auth-demo"
+name = "ory-test"
 main = "worker.js"
 compatibility_date = "2024-12-01"
 
