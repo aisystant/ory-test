@@ -1,0 +1,13 @@
+name = "ory-auth-demo"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+
+# All Ory params must be set before deploy:
+#   npx wrangler secret put ORY_PROJECT_URL
+#   npx wrangler secret put ORY_CLIENT_ID
+#   npx wrangler secret put ORY_CLIENT_SECRET
+#
+# For local dev, use .dev.vars file:
+#   ORY_PROJECT_URL=https://your-project.projects.oryapis.com
+#   ORY_CLIENT_ID=your-client-id
+#   ORY_CLIENT_SECRET=your-client-secret
