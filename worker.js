@@ -193,16 +193,13 @@ async function handleLogin(env, baseUrl) {
 
   const authUrl = `${env.ORY_PROJECT_URL}/oauth2/auth?${params}`;
 
-  return new Response(null, {
+  const response = new Response(null, {
     status: 302,
-    headers: {
-      Location: authUrl,
-      "Set-Cookie": [
-        setStateCookie("ory_demo_state", state),
-        setStateCookie("ory_demo_verifier", codeVerifier),
-      ].join(", "),
-    },
+    headers: { Location: authUrl },
   });
+  response.headers.append("Set-Cookie", setStateCookie("ory_demo_state", state));
+  response.headers.append("Set-Cookie", setStateCookie("ory_demo_verifier", codeVerifier));
+  return response;
 }
 
 // ── /callback — handle Ory redirect ───────────────────────────────────
