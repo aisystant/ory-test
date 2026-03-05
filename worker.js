@@ -89,14 +89,29 @@ function errorPage(title, detail) {
   );
 }
 
-function successPage(tokens, idTokenPayload, userinfoData) {
-  const tokenDisplay = {
-    access_token: tokens.access_token ? tokens.access_token.slice(0, 20) + "..." : null,
-    refresh_token: tokens.refresh_token ? tokens.refresh_token.slice(0, 20) + "..." : null,
+function decodeJwtParts(jwt) {
+  if (!jwt) return null;
+  try {
+    const parts = jwt.split(".");
+    const decode = (s) => {
+      const padded = s + "=".repeat((4 - (s.length % 4)) % 4);
+      return JSON.parse(atob(padded));
+    };
+    return { header: decode(parts[0]), payload: decode(parts[1]) };
+  } catch {
+    return null;
+  }
+}
+
+function successPage(tokens, userinfoData) {
+  const tokenMeta = {
     token_type: tokens.token_type,
     expires_in: tokens.expires_in,
     scope: tokens.scope,
   };
+
+  const accessDecoded = decodeJwtParts(tokens.access_token);
+  const idDecoded = decodeJwtParts(tokens.id_token);
 
   return new Response(
     `<!DOCTYPE html>
@@ -104,23 +119,73 @@ function successPage(tokens, idTokenPayload, userinfoData) {
 <head>
   <meta charset="utf-8"><title>Auth Success</title>
   <style>
-    body{font-family:system-ui,sans-serif;background:#f5f5f5;display:flex;justify-content:center;align-items:center;min-height:100vh}
-    .card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.1);padding:2.5rem;max-width:700px;width:100%}
+    body{font-family:system-ui,sans-serif;background:#f5f5f5;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:2rem 1rem}
+    .card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.1);padding:2.5rem;max-width:900px;width:100%}
     h1{color:#2e7d32;font-size:1.3rem;margin-bottom:.5rem}
     .sub{color:#666;margin-bottom:1.5rem}
     h2{font-size:1rem;color:#333;margin-top:1.5rem;margin-bottom:.5rem}
+    h3{font-size:.9rem;color:#555;margin-top:1rem;margin-bottom:.3rem}
     pre{background:#fafafa;padding:1rem;border-radius:8px;overflow-x:auto;font-size:.82rem;white-space:pre-wrap;word-break:break-all}
+    .raw-token{background:#1e1e1e;color:#d4d4d4;padding:1rem;border-radius:8px;font-size:.75rem;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
+    .jwt-parts{display:flex;flex-direction:column;gap:.5rem}
+    .jwt-header{background:#e3f2fd;padding:.75rem;border-radius:6px;font-size:.82rem;white-space:pre-wrap;word-break:break-all}
+    .jwt-payload{background:#f3e5f5;padding:.75rem;border-radius:6px;font-size:.82rem;white-space:pre-wrap;word-break:break-all}
     a{display:inline-block;margin-top:1.5rem;color:#0070f3}
+    .section{border:1px solid #e0e0e0;border-radius:8px;padding:1rem;margin-top:1rem}
+    .label{font-size:.75rem;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Authorization Successful</h1>
     <p class="sub">Ory OAuth2 flow completed. Settings are working correctly.</p>
-    <h2>Tokens received</h2>
-    <pre>${JSON.stringify(tokenDisplay, null, 2)}</pre>
-    <h2>ID Token claims</h2>
-    <pre>${JSON.stringify(idTokenPayload, null, 2)}</pre>
+
+    <h2>Token metadata</h2>
+    <pre>${JSON.stringify(tokenMeta, null, 2)}</pre>
+
+    ${tokens.access_token ? `
+    <div class="section">
+      <h2>Access Token</h2>
+      <div class="label">Raw JWT</div>
+      <div class="raw-token">${tokens.access_token}</div>
+      ${accessDecoded ? `
+      <div class="jwt-parts">
+        <div>
+          <div class="label">Header</div>
+          <div class="jwt-header">${JSON.stringify(accessDecoded.header, null, 2)}</div>
+        </div>
+        <div>
+          <div class="label">Payload</div>
+          <div class="jwt-payload">${JSON.stringify(accessDecoded.payload, null, 2)}</div>
+        </div>
+      </div>` : `<p style="color:#888;font-size:.85rem;margin-top:.5rem">Opaque token (not a JWT)</p>`}
+    </div>` : ""}
+
+    ${tokens.id_token ? `
+    <div class="section">
+      <h2>ID Token</h2>
+      <div class="label">Raw JWT</div>
+      <div class="raw-token">${tokens.id_token}</div>
+      ${idDecoded ? `
+      <div class="jwt-parts">
+        <div>
+          <div class="label">Header</div>
+          <div class="jwt-header">${JSON.stringify(idDecoded.header, null, 2)}</div>
+        </div>
+        <div>
+          <div class="label">Payload (Claims)</div>
+          <div class="jwt-payload">${JSON.stringify(idDecoded.payload, null, 2)}</div>
+        </div>
+      </div>` : ""}
+    </div>` : ""}
+
+    ${tokens.refresh_token ? `
+    <div class="section">
+      <h2>Refresh Token</h2>
+      <div class="label">Raw token</div>
+      <div class="raw-token">${tokens.refresh_token}</div>
+    </div>` : ""}
+
     ${userinfoData ? `<h2>UserInfo endpoint</h2><pre>${JSON.stringify(userinfoData, null, 2)}</pre>` : ""}
     <a href="/">Back to home</a>
   </div>
@@ -259,18 +324,6 @@ async function handleCallback(request, env, baseUrl) {
     );
   }
 
-  // Decode id_token
-  let idClaims = {};
-  if (tokenData.id_token) {
-    try {
-      const payload = tokenData.id_token.split(".")[1];
-      const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
-      idClaims = JSON.parse(atob(padded));
-    } catch {
-      idClaims = { note: "could not decode id_token" };
-    }
-  }
-
   // Fetch /userinfo
   let userinfoData = null;
   try {
@@ -281,7 +334,7 @@ async function handleCallback(request, env, baseUrl) {
   } catch { /* ignore */ }
 
   // Clear cookies and show result
-  const response = successPage(tokenData, idClaims, userinfoData);
+  const response = successPage(tokenData, userinfoData);
   response.headers.append("Set-Cookie", clearCookie("ory_demo_state"));
   response.headers.append("Set-Cookie", clearCookie("ory_demo_verifier"));
   return response;
